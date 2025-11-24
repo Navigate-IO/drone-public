@@ -29,7 +29,7 @@ public class BaseAreaSensorDump {
     private static long takeoffTime = -1;
     private static int sampleCountToCollect = 10;
 
-    public static BaseAreaSensorDump getInstance() {
+    public static synchronized BaseAreaSensorDump getInstance() {
         if (baseAreaSensorDump != null) {
            if (baseAreaSensorDump.getTotalSampleCount() > sampleCountToCollect) {
                String json = Utils.toJson(baseAreaSensorDump);
@@ -48,7 +48,7 @@ public class BaseAreaSensorDump {
         return baseAreaSensorDump;
     }
 
-    public static void writeToFiles(String json) {
+    public static synchronized void writeToFiles(String json) {
         String folder = "Output";
         File folderFile = new File(folder);
         if (!(folderFile.exists())) {
@@ -70,7 +70,7 @@ public class BaseAreaSensorDump {
         }
     }
 
-    public static void initialize(String team, long time) {
+    public static synchronized void initialize(String team, long time) {
         System.out.println("Intialize team name with " + team);
         System.out.println("Intialize take off time with " + time);
 
@@ -78,13 +78,13 @@ public class BaseAreaSensorDump {
         takeoffTime = time;
     }
 
-    public static void addClientData(ClientData clientData) {
+    public static synchronized void addClientData(ClientData clientData) {
         BaseAreaSensorDump temp = getInstance();
         temp.addSensorData(clientData);
         incrementalBaseAreaSensorDump.addSensorData(clientData);
     }
 
-    public static String collectData() {
+    public static synchronized String collectData() {
         long firstDumpTime = baseAreaSensorDump.getFirstDumpTime();
         long currentTime = System.currentTimeMillis();
         if (firstDumpTime <= 0) {
@@ -97,7 +97,7 @@ public class BaseAreaSensorDump {
         return result;
     }
 
-    public static String collectIncrementData() {
+    public static synchronized String collectIncrementData() {
         long firstDumpTime = incrementalBaseAreaSensorDump.getFirstDumpTime();
         long currentTime = System.currentTimeMillis();
         if (firstDumpTime <= 0) {
@@ -110,7 +110,7 @@ public class BaseAreaSensorDump {
         return result;
     }
 
-    public static void resetIncrementalData() {
+    public static synchronized void resetIncrementalData() {
         incrementalBaseAreaSensorDump.getCollectData().clear();
         incrementalBaseAreaSensorDump.getSensorLocations().clear();
     }

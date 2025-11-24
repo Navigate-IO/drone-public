@@ -28,4 +28,8 @@ public class Utils {
     public static <T> T fromJson(String json, Class<T> clazz) {
         return gson.fromJson(json, clazz);
     }
+
+    public static Thread create(String label, Runnable task) {
+        return new Thread(task, label);
+    }
 }

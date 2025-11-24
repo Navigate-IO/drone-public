@@ -12,6 +12,7 @@ public class Config {
     private long takeOffTime = -1;
     private String teamName;
     private String actualIpAddress;
+    private String otherDronesUrls;
     private static Config instance;
     public Config()
     {
@@ -19,6 +20,7 @@ public class Config {
         portNumber = 80;
         teamName = "NavigateIO";
         actualIpAddress = "192.168.40.20";
+        otherDronesUrls = "";
     }
 
     public String getIpAddress() {
@@ -66,6 +68,14 @@ public class Config {
 
     public static Config getInstance() {
         return instance;
+    }
+
+    public String getOtherDronesUrls() {
+        return otherDronesUrls;
+    }
+
+    public void setOtherDronesUrls(String otherDronesUrls) {
+        this.otherDronesUrls = otherDronesUrls;
     }
 
     public static Config loadDefaultConfigFile(String configFile) {

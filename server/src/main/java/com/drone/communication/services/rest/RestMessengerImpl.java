@@ -5,6 +5,12 @@ import com.drone.communication.serviceinterface.Message;
 import com.drone.communication.serviceinterface.MessageProcessor;
 import com.drone.communication.serviceinterface.Messenger;
 import com.drone.communication.serviceinterface.Target;
+import jakarta.ws.rs.client.Client;
+import jakarta.ws.rs.client.ClientBuilder;
+import jakarta.ws.rs.client.Entity;
+import jakarta.ws.rs.client.WebTarget;
+import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;
 
 import java.io.IOException;
 import java.net.URI;
@@ -25,9 +31,8 @@ public class RestMessengerImpl implements Messenger {
     public void sendMessage(Message message) {
         for (Target target : message.getTargets()) {
             try {
-                String contentType = "application/json";
-                sendToHttpRestServer(target.getTargetUrlPath(), message,
-                    contentType);
+                String sensorDataJson = message.getMessage();
+                sendToHttpRestServer(target.getTargetUrlPath(), sensorDataJson);
             } catch (IOException | InterruptedException exception) {
                 exception.printStackTrace();
             }
@@ -40,7 +45,6 @@ public class RestMessengerImpl implements Messenger {
             String jsonString = Utils.toJson(message);
             processor.processMessage(jsonString);
         }
-
     }
 
     @Override
@@ -48,21 +52,23 @@ public class RestMessengerImpl implements Messenger {
         messageProcessors.add(messageProcessor);
     }
 
-    public static HttpResponse<String> sendToHttpRestServer(String url,
-        Message message, String contentType)
+    public static void sendToHttpRestServer(String url,
+        String messageJson)
         throws IOException, InterruptedException {
-        String jsonString = Utils.toJson(message);
-        HttpClient client = HttpClient.newHttpClient();
+        String jsonPayload = messageJson;
 
-        HttpRequest request = HttpRequest.newBuilder().uri(URI.create(url))
-            .header("Content-Type", contentType)
-            .POST(HttpRequest.BodyPublishers.ofString(jsonString)).build();
+        Client client = ClientBuilder.newClient();
+        WebTarget target = client.target(url);
 
-        HttpResponse<String> response = client.send(request,
-            HttpResponse.BodyHandlers.ofString());
-        System.out.println("Sending message" + jsonString + " to destination " + url + " with contentType=" + contentType);
-        System.out.println("response code = " +  response.statusCode());
+        // Send the POST request with the JSON payload and receive the response
+        Response response = target.request(MediaType.TEXT_PLAIN)
+            .post(Entity.entity(jsonPayload, MediaType.TEXT_PLAIN));
 
-        return response;
+        try {
+            System.out.println("Status Code: " + response.getStatus());
+        } finally {
+            response.close();
+            client.close();
+        }
     }
 }
