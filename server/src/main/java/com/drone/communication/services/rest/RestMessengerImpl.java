@@ -12,6 +12,8 @@ import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -21,10 +23,14 @@ import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 public class RestMessengerImpl implements Messenger {
+    private static final int THREAD_POOL_SIZE = 5;
+    private static final ExecutorService executor = Executors.newFixedThreadPool(THREAD_POOL_SIZE);
+    private static boolean justOnce = false;
 
     private List<MessageProcessor> messageProcessors;
     public RestMessengerImpl() {
         messageProcessors = new CopyOnWriteArrayList<>();
+
     }
 
     @Override
@@ -55,20 +61,16 @@ public class RestMessengerImpl implements Messenger {
     public static void sendToHttpRestServer(String url,
         String messageJson)
         throws IOException, InterruptedException {
-        String jsonPayload = messageJson;
-
-        Client client = ClientBuilder.newClient();
-        WebTarget target = client.target(url);
-
-        // Send the POST request with the JSON payload and receive the response
-        Response response = target.request(MediaType.TEXT_PLAIN)
-            .post(Entity.entity(jsonPayload, MediaType.TEXT_PLAIN));
-
         try {
-            System.out.println("Status Code: " + response.getStatus());
-        } finally {
-            response.close();
-            client.close();
+            executor.execute(new RestClientTask(url, messageJson));
+        } catch (Exception exception) {
+            System.out.println("Unable to send message to server, url=" + url);
+        }
+        if (!justOnce) {
+            justOnce = true;
+            Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+                executor.shutdown();
+            }));
         }
     }
 }
