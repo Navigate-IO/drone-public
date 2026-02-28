@@ -13,6 +13,8 @@ public class Config {
     private String teamName;
     private String actualIpAddress;
     private String otherDronesUrls;
+    private String droneGpsSerialDevice;
+    private int droneGpsBaudRate;
     private static Config instance;
     public Config()
     {
@@ -21,6 +23,8 @@ public class Config {
         teamName = "NavigateIO";
         actualIpAddress = "192.168.40.20";
         otherDronesUrls = "";
+        droneGpsSerialDevice = "/dev/ttyUSB0";
+        droneGpsBaudRate = 9600;
     }
 
     public String getIpAddress() {
@@ -76,6 +80,28 @@ public class Config {
 
     public void setOtherDronesUrls(String otherDronesUrls) {
         this.otherDronesUrls = otherDronesUrls;
+    }
+
+    public String getDroneGpsSerialDevice() {
+        if (droneGpsSerialDevice == null || droneGpsSerialDevice.isBlank()) {
+            return "/dev/ttyUSB0";
+        }
+        return droneGpsSerialDevice;
+    }
+
+    public void setDroneGpsSerialDevice(String droneGpsSerialDevice) {
+        this.droneGpsSerialDevice = droneGpsSerialDevice;
+    }
+
+    public int getDroneGpsBaudRate() {
+        if (droneGpsBaudRate <= 0) {
+            return 9600;
+        }
+        return droneGpsBaudRate;
+    }
+
+    public void setDroneGpsBaudRate(int droneGpsBaudRate) {
+        this.droneGpsBaudRate = droneGpsBaudRate;
     }
 
     public static Config loadDefaultConfigFile(String configFile) {

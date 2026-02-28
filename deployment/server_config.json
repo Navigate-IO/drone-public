@@ -4,5 +4,7 @@
   "teamName": "NavigateIO",
   "takeOffTime": -1,
   "actualIpAddress": "192.168.40.20",
-  "otherDronesUrls": ""
+  "otherDronesUrls": "",
+  "droneGpsSerialDevice": "/dev/ttyUSB0",
+  "droneGpsBaudRate": 9600
 }
