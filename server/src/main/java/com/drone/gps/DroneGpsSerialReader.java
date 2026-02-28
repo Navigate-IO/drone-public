@@ -46,6 +46,7 @@ public class DroneGpsSerialReader {
     private Thread workerThread;
     private volatile SerialPort activePort;
     private volatile String activePortPath;
+    private volatile boolean autoPortScan;
 
     private volatile LocalDate lastUtcDateFromRmc;
     private Double lastLatitude;
@@ -64,6 +65,10 @@ public class DroneGpsSerialReader {
     }
 
     public synchronized void start(String serialDevice, int baudRate) {
+        start(serialDevice, baudRate, false);
+    }
+
+    public synchronized void start(String serialDevice, int baudRate, boolean autoPortScan) {
         if (running.get()) {
             return;
         }
@@ -71,6 +76,7 @@ public class DroneGpsSerialReader {
         final String deviceToUse = (serialDevice == null || serialDevice.isBlank())
             ? DEFAULT_SERIAL_DEVICE : serialDevice;
         final int baudToUse = baudRate > 0 ? baudRate : DEFAULT_BAUD_RATE;
+        this.autoPortScan = autoPortScan;
 
         running.set(true);
         workerThread = new Thread(() -> runLoop(deviceToUse, baudToUse), "drone-gps-serial-reader");
@@ -102,11 +108,12 @@ public class DroneGpsSerialReader {
 
     private void runLoop(String serialDevice, int baudRate) {
         while (running.get()) {
-            SerialPort serialPort = openAvailablePort(serialDevice, baudRate);
+            SerialPort serialPort = openAvailablePort(serialDevice, baudRate, autoPortScan);
             if (serialPort == null) {
                 System.err.println(
                     "[DRONE GPS] No GPS serial port opened. Preferred="
-                        + serialDevice + " available=" + listAvailablePortPaths() + " (retrying)"
+                        + serialDevice + " autoScan=" + autoPortScan
+                        + " available=" + listAvailablePortPaths() + " (retrying)"
                 );
                 publishPlaceholderIfNeeded("NO_SENSOR");
                 sleepQuietly(RECONNECT_DELAY_MS);
@@ -420,7 +427,17 @@ public class DroneGpsSerialReader {
         return field.replaceAll("[^\\x20-\\x7E]", "").trim();
     }
 
-    private SerialPort openAvailablePort(String preferredPortPath, int baudRate) {
+    private SerialPort openAvailablePort(String preferredPortPath, int baudRate, boolean autoScan) {
+        if (!autoScan) {
+            SerialPort candidate = SerialPort.getCommPort(preferredPortPath);
+            configure(candidate, baudRate);
+            if (candidate.openPort()) {
+                activePortPath = preferredPortPath;
+                return candidate;
+            }
+            return null;
+        }
+
         for (String path : buildCandidatePortPaths(preferredPortPath)) {
             SerialPort candidate = SerialPort.getCommPort(path);
             configure(candidate, baudRate);

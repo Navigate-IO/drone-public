@@ -6,5 +6,6 @@
   "actualIpAddress": "192.168.40.20",
   "otherDronesUrls": "",
   "droneGpsSerialDevice": "/dev/ttyUSB0",
-  "droneGpsBaudRate": 9600
+  "droneGpsBaudRate": 9600,
+  "droneGpsAutoPortScan": false
 }

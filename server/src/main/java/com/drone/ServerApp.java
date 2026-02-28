@@ -27,7 +27,11 @@ public class ServerApp {
         System.out.println("URI=" + baseUri);
         BaseAreaSensorDump.initialize(config.getTeamName(), config.getTakeOffTime());
         DataHandler.ipAddress = config.getActualIpAddress();
-        droneGpsSerialReader.start(config.getDroneGpsSerialDevice(), config.getDroneGpsBaudRate());
+        droneGpsSerialReader.start(
+            config.getDroneGpsSerialDevice(),
+            config.getDroneGpsBaudRate(),
+            config.isDroneGpsAutoPortScan()
+        );
 
         // Create and start a new instance of the Grizzly HTTP server
         // Exposing the Jersey application at BASE_URI
