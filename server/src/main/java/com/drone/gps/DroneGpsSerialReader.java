@@ -149,7 +149,19 @@ public class DroneGpsSerialReader {
     }
 
     private DroneGpsReading processSentence(String sentence) {
-        if (sentence == null || sentence.isBlank() || !sentence.startsWith("$")) {
+        if (sentence == null || sentence.isBlank()) {
+            return null;
+        }
+
+        sentence = sanitizeSentence(sentence);
+        int start = sentence.indexOf('$');
+        if (start < 0) {
+            return null;
+        }
+        if (start > 0) {
+            sentence = sentence.substring(start);
+        }
+        if (sentence.isBlank() || !sentence.startsWith("$")) {
             return null;
         }
 
@@ -160,7 +172,11 @@ public class DroneGpsSerialReader {
             return null;
         }
 
-        String sentenceType = fields[0];
+        for (int i = 0; i < fields.length; i++) {
+            fields[i] = sanitizeField(fields[i]);
+        }
+
+        String sentenceType = fields[0].toUpperCase();
         try {
             if (isRmcSentence(sentenceType)) {
                 return parseRmc(fields);
@@ -393,6 +409,17 @@ public class DroneGpsSerialReader {
         return value == null ? "" : String.valueOf(value);
     }
 
+    private String sanitizeSentence(String sentence) {
+        return sentence.replaceAll("[^\\x20-\\x7E]", "").trim();
+    }
+
+    private String sanitizeField(String field) {
+        if (field == null) {
+            return "";
+        }
+        return field.replaceAll("[^\\x20-\\x7E]", "").trim();
+    }
+
     private SerialPort openAvailablePort(String preferredPortPath, int baudRate) {
         for (String path : buildCandidatePortPaths(preferredPortPath)) {
             SerialPort candidate = SerialPort.getCommPort(path);
@@ -500,14 +527,15 @@ public class DroneGpsSerialReader {
     }
 
     private LocalDate parseDate(String rawDate) {
-        if (rawDate == null || rawDate.length() < 6) {
+        String cleaned = extractNumeric(rawDate);
+        if (cleaned == null || cleaned.length() < 6) {
             return null;
         }
 
         try {
-            int day = Integer.parseInt(rawDate.substring(0, 2));
-            int month = Integer.parseInt(rawDate.substring(2, 4));
-            int year = Integer.parseInt(rawDate.substring(4, 6));
+            int day = Integer.parseInt(cleaned.substring(0, 2));
+            int month = Integer.parseInt(cleaned.substring(2, 4));
+            int year = Integer.parseInt(cleaned.substring(4, 6));
             int resolvedYear = year >= 80 ? 1900 + year : 2000 + year;
             return LocalDate.of(resolvedYear, month, day);
         } catch (RuntimeException exception) {
@@ -538,7 +566,7 @@ public class DroneGpsSerialReader {
             return null;
         }
 
-        String trimmed = rawTime.trim();
+        String trimmed = rawTime.replaceAll("[^0-9.]", "").trim();
         if (trimmed.length() < 6) {
             return null;
         }
@@ -569,21 +597,23 @@ public class DroneGpsSerialReader {
     }
 
     private Double parseCoordinate(String rawCoordinate, String hemisphere) {
-        if (rawCoordinate == null || rawCoordinate.isBlank()) {
+        String coordinateToken = extractNumericWithDecimal(rawCoordinate);
+        if (coordinateToken == null || coordinateToken.isBlank()) {
             return null;
         }
-        if (hemisphere == null || hemisphere.isBlank()) {
+
+        String hemisphereToken = extractHemisphere(hemisphere);
+        if (hemisphereToken == null) {
             return null;
         }
 
         try {
-            double coordinate = Double.parseDouble(rawCoordinate);
+            double coordinate = Double.parseDouble(coordinateToken);
             int degrees = (int) (coordinate / 100);
             double minutes = coordinate - (degrees * 100.0);
             double decimalDegrees = degrees + (minutes / 60.0);
 
-            String normalizedHemisphere = hemisphere.trim().toUpperCase();
-            if ("S".equals(normalizedHemisphere) || "W".equals(normalizedHemisphere)) {
+            if ("S".equals(hemisphereToken) || "W".equals(hemisphereToken)) {
                 decimalDegrees = -decimalDegrees;
             }
 
@@ -594,27 +624,68 @@ public class DroneGpsSerialReader {
     }
 
     private Double parseDouble(String value) {
-        if (value == null || value.isBlank()) {
+        String cleaned = extractNumericWithDecimal(value);
+        if (cleaned == null || cleaned.isBlank()) {
             return null;
         }
 
         try {
-            return Double.parseDouble(value);
+            return Double.parseDouble(cleaned);
         } catch (NumberFormatException exception) {
             return null;
         }
     }
 
     private Integer parseInteger(String value) {
-        if (value == null || value.isBlank()) {
+        String cleaned = extractInteger(value);
+        if (cleaned == null || cleaned.isBlank()) {
             return null;
         }
 
         try {
-            return Integer.parseInt(value);
+            return Integer.parseInt(cleaned);
         } catch (NumberFormatException exception) {
             return null;
         }
+    }
+
+    private String extractNumeric(String value) {
+        if (value == null) {
+            return null;
+        }
+        String cleaned = value.replaceAll("[^0-9]", "");
+        return cleaned.isBlank() ? null : cleaned;
+    }
+
+    private String extractNumericWithDecimal(String value) {
+        if (value == null) {
+            return null;
+        }
+        String cleaned = value.replaceAll("[^0-9.\\-+]", "");
+        return cleaned.isBlank() ? null : cleaned;
+    }
+
+    private String extractInteger(String value) {
+        if (value == null) {
+            return null;
+        }
+        String cleaned = value.replaceAll("[^0-9\\-+]", "");
+        return cleaned.isBlank() ? null : cleaned;
+    }
+
+    private String extractHemisphere(String value) {
+        if (value == null) {
+            return null;
+        }
+
+        String upper = value.toUpperCase();
+        for (int i = 0; i < upper.length(); i++) {
+            char c = upper.charAt(i);
+            if (c == 'N' || c == 'S' || c == 'E' || c == 'W') {
+                return String.valueOf(c);
+            }
+        }
+        return null;
     }
 
     private String formatDouble(Double value, int precision) {
