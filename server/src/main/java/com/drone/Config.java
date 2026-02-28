@@ -16,7 +16,6 @@ public class Config {
     private String droneGpsSerialDevice;
     private int droneGpsBaudRate;
     private boolean droneGpsAutoPortScan;
-    private boolean droneGpsDebug;
     private static Config instance;
     public Config()
     {
@@ -28,7 +27,6 @@ public class Config {
         droneGpsSerialDevice = "/dev/ttyUSB0";
         droneGpsBaudRate = 9600;
         droneGpsAutoPortScan = false;
-        droneGpsDebug = false;
     }
 
     public String getIpAddress() {
@@ -114,14 +112,6 @@ public class Config {
 
     public void setDroneGpsAutoPortScan(boolean droneGpsAutoPortScan) {
         this.droneGpsAutoPortScan = droneGpsAutoPortScan;
-    }
-
-    public boolean isDroneGpsDebug() {
-        return droneGpsDebug;
-    }
-
-    public void setDroneGpsDebug(boolean droneGpsDebug) {
-        this.droneGpsDebug = droneGpsDebug;
     }
 
     public static Config loadDefaultConfigFile(String configFile) {

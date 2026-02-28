@@ -47,7 +47,6 @@ public class DroneGpsSerialReader {
     private volatile SerialPort activePort;
     private volatile String activePortPath;
     private volatile boolean autoPortScan;
-    private volatile boolean debugLogging;
 
     private volatile LocalDate lastUtcDateFromRmc;
     private Double lastLatitude;
@@ -66,14 +65,10 @@ public class DroneGpsSerialReader {
     }
 
     public synchronized void start(String serialDevice, int baudRate) {
-        start(serialDevice, baudRate, false, false);
+        start(serialDevice, baudRate, false);
     }
 
     public synchronized void start(String serialDevice, int baudRate, boolean autoPortScan) {
-        start(serialDevice, baudRate, autoPortScan, false);
-    }
-
-    public synchronized void start(String serialDevice, int baudRate, boolean autoPortScan, boolean debugLogging) {
         if (running.get()) {
             return;
         }
@@ -82,8 +77,6 @@ public class DroneGpsSerialReader {
             ? DEFAULT_SERIAL_DEVICE : serialDevice;
         final int baudToUse = baudRate > 0 ? baudRate : DEFAULT_BAUD_RATE;
         this.autoPortScan = autoPortScan;
-        this.debugLogging = debugLogging;
-        debug("Starting reader preferredPort=" + deviceToUse + " baud=" + baudToUse + " autoScan=" + autoPortScan);
 
         running.set(true);
         workerThread = new Thread(() -> runLoop(deviceToUse, baudToUse), "drone-gps-serial-reader");
@@ -176,12 +169,10 @@ public class DroneGpsSerialReader {
             sentence = sentence.substring(start);
         }
         if (sentence.isBlank() || !sentence.startsWith("$")) {
-            debug("Rejected sentence without '$': " + trimForLog(sentence));
             return null;
         }
 
         if (!isChecksumValid(sentence)) {
-            debug("Rejected sentence due to checksum mismatch: " + trimForLog(sentence));
             return null;
         }
 
@@ -199,11 +190,9 @@ public class DroneGpsSerialReader {
         String sentenceType = fields[0].toUpperCase();
         try {
             if (isRmcSentence(sentenceType)) {
-                debug("Parsing RMC sentence: " + trimForLog(sentence));
                 return parseRmc(fields);
             }
             if (isGgaSentence(sentenceType)) {
-                debug("Parsing GGA sentence: " + trimForLog(sentence));
                 return parseGga(fields);
             }
         } catch (RuntimeException exception) {
@@ -214,7 +203,6 @@ public class DroneGpsSerialReader {
     }
 
     private void handleIncomingText(String incomingText) {
-        debug("Raw chunk: " + trimForLog(incomingText));
         for (String sentence : splitIntoSentenceCandidates(incomingText)) {
             DroneGpsReading reading = processSentence(sentence);
             if (reading == null) {
@@ -257,7 +245,6 @@ public class DroneGpsSerialReader {
 
     private DroneGpsReading parseRmc(String[] fields) {
         if (fields.length < 10) {
-            debug("RMC rejected: not enough fields");
             return null;
         }
 
@@ -265,9 +252,6 @@ public class DroneGpsSerialReader {
         Double latitude = parseCoordinate(fields[3], fields[4]);
         Double longitude = parseCoordinate(fields[5], fields[6]);
         Double speed = parseDouble(fields[7]);
-        debug("RMC fields status=" + status + " latRaw=" + fields[3] + " " + fields[4]
-            + " lonRaw=" + fields[5] + " " + fields[6] + " speedRaw=" + fields[7]
-            + " parsedLat=" + latitude + " parsedLon=" + longitude + " parsedSpeed=" + speed);
 
         LocalDate utcDate = parseDate(fields[9]);
         if (utcDate != null) {
@@ -316,7 +300,6 @@ public class DroneGpsSerialReader {
 
     private DroneGpsReading parseGga(String[] fields) {
         if (fields.length < 10) {
-            debug("GGA rejected: not enough fields");
             return null;
         }
 
@@ -325,11 +308,6 @@ public class DroneGpsSerialReader {
         Integer fixQuality = parseInteger(fields[6]);
         Integer satelliteCount = parseInteger(fields[7]);
         Double altitude = parseDouble(fields[9]);
-        debug("GGA fields latRaw=" + fields[2] + " " + fields[3]
-            + " lonRaw=" + fields[4] + " " + fields[5]
-            + " fixRaw=" + fields[6] + " satsRaw=" + fields[7] + " altRaw=" + fields[9]
-            + " parsedLat=" + latitude + " parsedLon=" + longitude
-            + " parsedFix=" + fixQuality + " parsedSats=" + satelliteCount + " parsedAlt=" + altitude);
 
         String utcTimestamp = buildUtcTimestamp(lastUtcDateFromRmc, fields[1]);
         if (utcTimestamp != null) {
@@ -557,24 +535,6 @@ public class DroneGpsSerialReader {
             calculated ^= sentence.charAt(i);
         }
         return calculated == expected;
-    }
-
-    private void debug(String message) {
-        if (!debugLogging) {
-            return;
-        }
-        System.out.println("[DRONE GPS DEBUG] " + message);
-    }
-
-    private String trimForLog(String value) {
-        if (value == null) {
-            return "null";
-        }
-        String cleaned = value.replace('\n', ' ').replace('\r', ' ').trim();
-        if (cleaned.length() <= 220) {
-            return cleaned;
-        }
-        return cleaned.substring(0, 220) + "...";
     }
 
     private void publishPlaceholderIfNeeded(String utcStatus) {

@@ -7,6 +7,5 @@
   "otherDronesUrls": "",
   "droneGpsSerialDevice": "/dev/ttyUSB0",
   "droneGpsBaudRate": 9600,
-  "droneGpsAutoPortScan": false,
-  "droneGpsDebug": true
+  "droneGpsAutoPortScan": false
 }

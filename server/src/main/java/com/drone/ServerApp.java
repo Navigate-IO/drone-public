@@ -30,8 +30,7 @@ public class ServerApp {
         droneGpsSerialReader.start(
             config.getDroneGpsSerialDevice(),
             config.getDroneGpsBaudRate(),
-            config.isDroneGpsAutoPortScan(),
-            config.isDroneGpsDebug()
+            config.isDroneGpsAutoPortScan()
         );
 
         // Create and start a new instance of the Grizzly HTTP server
