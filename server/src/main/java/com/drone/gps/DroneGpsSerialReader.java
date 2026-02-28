@@ -15,6 +15,8 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneOffset;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -22,6 +24,13 @@ public class DroneGpsSerialReader {
     private static final String DEFAULT_SERIAL_DEVICE = "/dev/ttyUSB0";
     private static final int DEFAULT_BAUD_RATE = 9600;
     private static final long RECONNECT_DELAY_MS = 3000L;
+    private static final String[] COMMON_LINUX_PORTS = new String[] {
+        "/dev/ttyUSB0",
+        "/dev/ttyACM0",
+        "/dev/serial0",
+        "/dev/ttyAMA0",
+        "/dev/ttyS0"
+    };
 
     private static final DroneGpsSerialReader INSTANCE = new DroneGpsSerialReader();
 
@@ -34,6 +43,7 @@ public class DroneGpsSerialReader {
 
     private Thread workerThread;
     private volatile SerialPort activePort;
+    private volatile String activePortPath;
 
     private volatile LocalDate lastUtcDateFromRmc;
     private Double lastLatitude;
@@ -90,12 +100,12 @@ public class DroneGpsSerialReader {
 
     private void runLoop(String serialDevice, int baudRate) {
         while (running.get()) {
-            SerialPort serialPort = SerialPort.getCommPort(serialDevice);
-            serialPort.setComPortParameters(baudRate, 8, SerialPort.ONE_STOP_BIT, SerialPort.NO_PARITY);
-            serialPort.setComPortTimeouts(SerialPort.TIMEOUT_READ_SEMI_BLOCKING, 1000, 0);
-
-            if (!serialPort.openPort()) {
-                System.err.println("[DRONE GPS] Serial device not available: " + serialDevice + " (retrying)");
+            SerialPort serialPort = openAvailablePort(serialDevice, baudRate);
+            if (serialPort == null) {
+                System.err.println(
+                    "[DRONE GPS] No GPS serial port opened. Preferred="
+                        + serialDevice + " available=" + listAvailablePortPaths() + " (retrying)"
+                );
                 publishPlaceholderIfNeeded("NO_SENSOR");
                 sleepQuietly(RECONNECT_DELAY_MS);
                 continue;
@@ -103,7 +113,7 @@ public class DroneGpsSerialReader {
 
             activePort = serialPort;
             placeholderPublished.set(false);
-            System.out.println("[DRONE GPS] Connected to " + serialDevice + " @ " + baudRate + " baud");
+            System.out.println("[DRONE GPS] Connected to " + activePortPath + " @ " + baudRate + " baud");
 
             try (BufferedReader reader = new BufferedReader(
                 new InputStreamReader(serialPort.getInputStream(), StandardCharsets.US_ASCII))) {
@@ -133,6 +143,7 @@ public class DroneGpsSerialReader {
                     serialPort.closePort();
                 }
                 activePort = null;
+                activePortPath = null;
             }
 
             if (running.get()) {
@@ -156,10 +167,10 @@ public class DroneGpsSerialReader {
 
         String sentenceType = fields[0];
         try {
-            if ("$GPRMC".equals(sentenceType) || "$GNRMC".equals(sentenceType)) {
+            if (isRmcSentence(sentenceType)) {
                 return parseRmc(fields);
             }
-            if ("$GPGGA".equals(sentenceType) || "$GNGGA".equals(sentenceType)) {
+            if (isGgaSentence(sentenceType)) {
                 return parseGga(fields);
             }
         } catch (RuntimeException exception) {
@@ -344,6 +355,74 @@ public class DroneGpsSerialReader {
 
     private String csvValue(Object value) {
         return value == null ? "" : String.valueOf(value);
+    }
+
+    private SerialPort openAvailablePort(String preferredPortPath, int baudRate) {
+        for (String path : buildCandidatePortPaths(preferredPortPath)) {
+            SerialPort candidate = SerialPort.getCommPort(path);
+            configure(candidate, baudRate);
+            if (candidate.openPort()) {
+                activePortPath = path;
+                return candidate;
+            }
+        }
+        return null;
+    }
+
+    private Set<String> buildCandidatePortPaths(String preferredPortPath) {
+        LinkedHashSet<String> candidates = new LinkedHashSet<>();
+        if (preferredPortPath != null && !preferredPortPath.isBlank()) {
+            candidates.add(preferredPortPath.trim());
+        }
+
+        for (String path : COMMON_LINUX_PORTS) {
+            candidates.add(path);
+        }
+
+        for (SerialPort port : SerialPort.getCommPorts()) {
+            String path = toPortPath(port);
+            if (path != null && !path.isBlank()) {
+                candidates.add(path);
+            }
+        }
+        return candidates;
+    }
+
+    private String listAvailablePortPaths() {
+        StringBuilder result = new StringBuilder();
+        SerialPort[] ports = SerialPort.getCommPorts();
+        for (int index = 0; index < ports.length; index++) {
+            if (index > 0) {
+                result.append(", ");
+            }
+            result.append(toPortPath(ports[index]));
+        }
+        return result.toString();
+    }
+
+    private String toPortPath(SerialPort port) {
+        String path = port.getSystemPortPath();
+        if (path == null || path.isBlank()) {
+            String name = port.getSystemPortName();
+            if (name == null || name.isBlank()) {
+                return null;
+            }
+            return name.startsWith("/dev/") ? name : "/dev/" + name;
+        }
+        return path;
+    }
+
+    private void configure(SerialPort port, int baudRate) {
+        port.setComPortParameters(baudRate, 8, SerialPort.ONE_STOP_BIT, SerialPort.NO_PARITY);
+        port.setComPortTimeouts(SerialPort.TIMEOUT_READ_SEMI_BLOCKING, 1000, 0);
+    }
+
+    private boolean isRmcSentence(String sentenceType) {
+        return sentenceType != null && sentenceType.startsWith("$") && sentenceType.endsWith("RMC");
+    }
+
+    private boolean isGgaSentence(String sentenceType) {
+        return sentenceType != null && sentenceType.startsWith("$") && sentenceType.endsWith("GGA");
     }
 
     private void publishPlaceholderIfNeeded(String utcStatus) {
