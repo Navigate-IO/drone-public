@@ -15,7 +15,9 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -124,14 +126,7 @@ public class DroneGpsSerialReader {
                         continue;
                     }
 
-                    DroneGpsReading reading = processSentence(line.trim());
-                    if (reading == null) {
-                        continue;
-                    }
-
-                    latestReading.set(reading);
-                    printReading(reading);
-                    appendToLog(reading);
+                    handleIncomingText(line);
                 }
             } catch (IOException exception) {
                 if (running.get()) {
@@ -178,6 +173,47 @@ public class DroneGpsSerialReader {
         }
 
         return null;
+    }
+
+    private void handleIncomingText(String incomingText) {
+        for (String sentence : splitIntoSentenceCandidates(incomingText)) {
+            DroneGpsReading reading = processSentence(sentence);
+            if (reading == null) {
+                continue;
+            }
+
+            latestReading.set(reading);
+            printReading(reading);
+            appendToLog(reading);
+        }
+    }
+
+    private List<String> splitIntoSentenceCandidates(String incomingText) {
+        ArrayList<String> sentences = new ArrayList<>();
+        if (incomingText == null) {
+            return sentences;
+        }
+
+        String normalized = incomingText.replace('\r', ' ').replace('\n', ' ').trim();
+        if (normalized.isEmpty()) {
+            return sentences;
+        }
+
+        if (!normalized.contains("$")) {
+            sentences.add(normalized);
+            return sentences;
+        }
+
+        String[] parts = normalized.split("\\$");
+        for (String part : parts) {
+            String trimmed = part.trim();
+            if (trimmed.isEmpty()) {
+                continue;
+            }
+            sentences.add("$" + trimmed);
+        }
+
+        return sentences;
     }
 
     private DroneGpsReading parseRmc(String[] fields) {
