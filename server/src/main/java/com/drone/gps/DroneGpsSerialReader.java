@@ -1,6 +1,10 @@
 package com.drone.gps;
 
+import com.drone.Config;
+import com.drone.MessengerUtils;
+import com.drone.Utils;
 import com.drone.data.DroneGpsReading;
+import com.drone.data.DroneGpsRelayMessage;
 import com.fazecast.jSerialComm.SerialPort;
 
 import java.io.BufferedReader;
@@ -25,6 +29,7 @@ import java.util.concurrent.atomic.AtomicReference;
 public class DroneGpsSerialReader {
     private static final String DEFAULT_SERIAL_DEVICE = "/dev/ttyUSB0";
     private static final int DEFAULT_BAUD_RATE = 9600;
+    private static final long DEFAULT_PUBLISH_INTERVAL_MS = 60_000L;
     private static final long RECONNECT_DELAY_MS = 3000L;
     private static final String[] COMMON_LINUX_PORTS = new String[] {
         "/dev/ttyUSB0",
@@ -47,6 +52,8 @@ public class DroneGpsSerialReader {
     private volatile SerialPort activePort;
     private volatile String activePortPath;
     private volatile boolean autoPortScan;
+    private volatile long publishIntervalMs = DEFAULT_PUBLISH_INTERVAL_MS;
+    private volatile long lastPublishedAtMs = 0L;
 
     private volatile LocalDate lastUtcDateFromRmc;
     private Double lastLatitude;
@@ -65,10 +72,14 @@ public class DroneGpsSerialReader {
     }
 
     public synchronized void start(String serialDevice, int baudRate) {
-        start(serialDevice, baudRate, false);
+        start(serialDevice, baudRate, false, DEFAULT_PUBLISH_INTERVAL_MS);
     }
 
     public synchronized void start(String serialDevice, int baudRate, boolean autoPortScan) {
+        start(serialDevice, baudRate, autoPortScan, DEFAULT_PUBLISH_INTERVAL_MS);
+    }
+
+    public synchronized void start(String serialDevice, int baudRate, boolean autoPortScan, long publishIntervalMs) {
         if (running.get()) {
             return;
         }
@@ -77,6 +88,8 @@ public class DroneGpsSerialReader {
             ? DEFAULT_SERIAL_DEVICE : serialDevice;
         final int baudToUse = baudRate > 0 ? baudRate : DEFAULT_BAUD_RATE;
         this.autoPortScan = autoPortScan;
+        this.publishIntervalMs = publishIntervalMs > 0 ? publishIntervalMs : DEFAULT_PUBLISH_INTERVAL_MS;
+        this.lastPublishedAtMs = 0L;
 
         running.set(true);
         workerThread = new Thread(() -> runLoop(deviceToUse, baudToUse), "drone-gps-serial-reader");
@@ -210,9 +223,37 @@ public class DroneGpsSerialReader {
             }
 
             latestReading.set(reading);
-            printReading(reading);
-            appendToLog(reading);
+            if (shouldPublish(reading.getLocalTimestamp())) {
+                publishReading(reading);
+            }
         }
+    }
+
+    private boolean shouldPublish(long currentTimestampMs) {
+        if (lastPublishedAtMs <= 0) {
+            lastPublishedAtMs = currentTimestampMs;
+            return true;
+        }
+        if (currentTimestampMs - lastPublishedAtMs >= publishIntervalMs) {
+            lastPublishedAtMs = currentTimestampMs;
+            return true;
+        }
+        return false;
+    }
+
+    private void publishReading(DroneGpsReading reading) {
+        printReading(reading);
+        appendToLog(reading);
+        sendReadingToOtherDrones(reading);
+    }
+
+    private void sendReadingToOtherDrones(DroneGpsReading reading) {
+        if (Config.getInstance() == null) {
+            return;
+        }
+        DroneGpsRelayMessage relayMessage = new DroneGpsRelayMessage("drone-gps", reading);
+        String relayJson = Utils.toJson(relayMessage);
+        MessengerUtils.sendToDrones(relayJson);
     }
 
     private List<String> splitIntoSentenceCandidates(String incomingText) {

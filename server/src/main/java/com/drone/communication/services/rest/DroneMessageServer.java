@@ -4,6 +4,8 @@ import com.drone.ServerUtils;
 import com.drone.Utils;
 import com.drone.communication.DroneMessenger;
 import com.drone.communication.serviceinterface.Message;
+import com.drone.data.DroneGpsReading;
+import com.drone.data.DroneGpsRelayMessage;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
@@ -23,6 +25,25 @@ public class DroneMessageServer {
         //        String messageJson = Utils.toJson(message);
         System.out.println("Receive message " + messageJson);
         try {
+            DroneGpsRelayMessage relayMessage = Utils.fromJson(messageJson, DroneGpsRelayMessage.class);
+            if (relayMessage != null
+                && "drone-gps".equalsIgnoreCase(relayMessage.getMessageType())
+                && relayMessage.getReading() != null) {
+                DroneGpsReading reading = relayMessage.getReading();
+                System.out.println(String.format(
+                    "[DRONE GPS RELAY] lat=%s lon=%s alt=%s speed=%s fix=%s sats=%s utc=%s local=%d",
+                    reading.getLatitude(),
+                    reading.getLongitude(),
+                    reading.getAltitude(),
+                    reading.getSpeed(),
+                    reading.getFixQuality(),
+                    reading.getSatelliteCount(),
+                    reading.getUtcTimestamp(),
+                    reading.getLocalTimestamp()
+                ));
+                return "OK";
+            }
+
 //            //            Message message = Utils.fromJson(messageJson, Message.class);
 //            //            DroneMessenger.getInstance().receiveMessage(message);
             String ipAddress = "192.168.40.20";
