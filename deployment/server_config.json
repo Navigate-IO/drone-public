@@ -1,6 +1,6 @@
 {
   "ipAddress":"0.0.0.0",
-  "portNumber":8080,
+  "portNumber":80,
   "teamName": "NavigateIO",
   "takeOffTime": -1,
   "actualIpAddress": "192.168.40.20",
