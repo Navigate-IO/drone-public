@@ -5,26 +5,24 @@ import com.drone.communication.serviceinterface.Message;
 import com.drone.communication.serviceinterface.MessageProcessor;
 import com.drone.communication.serviceinterface.Messenger;
 import com.drone.communication.serviceinterface.Target;
-import jakarta.ws.rs.client.Client;
-import jakarta.ws.rs.client.ClientBuilder;
-import jakarta.ws.rs.client.Entity;
-import jakarta.ws.rs.client.WebTarget;
-import jakarta.ws.rs.core.MediaType;
-import jakarta.ws.rs.core.Response;
 
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.io.IOException;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 public class RestMessengerImpl implements Messenger {
     private static final int THREAD_POOL_SIZE = 5;
-    private static final ExecutorService executor = Executors.newFixedThreadPool(THREAD_POOL_SIZE);
+    private static final int MAX_PENDING_SEND_TASKS = 200;
+    private static final ThreadPoolExecutor executor = new ThreadPoolExecutor(
+        THREAD_POOL_SIZE,
+        THREAD_POOL_SIZE,
+        0L,
+        TimeUnit.MILLISECONDS,
+        new ArrayBlockingQueue<>(MAX_PENDING_SEND_TASKS),
+        new ThreadPoolExecutor.AbortPolicy()
+    );
     private static boolean justOnce = false;
 
     private List<MessageProcessor> messageProcessors;
@@ -36,12 +34,8 @@ public class RestMessengerImpl implements Messenger {
     @Override
     public void sendMessage(Message message) {
         for (Target target : message.getTargets()) {
-            try {
-                String sensorDataJson = message.getMessage();
-                sendToHttpRestServer(target.getTargetUrlPath(), sensorDataJson);
-            } catch (IOException | InterruptedException exception) {
-                exception.printStackTrace();
-            }
+            String sensorDataJson = message.getMessage();
+            sendToHttpRestServer(target.getTargetUrlPath(), sensorDataJson);
         }
     }
 
@@ -58,13 +52,10 @@ public class RestMessengerImpl implements Messenger {
         messageProcessors.add(messageProcessor);
     }
 
-    public static void sendToHttpRestServer(String url,
-        String messageJson)
-        throws IOException, InterruptedException {
+    public static void sendToHttpRestServer(String url, String messageJson) {
         try {
             executor.execute(new RestClientTask(url, messageJson));
-        } catch (Exception exception) {
-            System.out.println("Unable to send message to server, url=" + url);
+        } catch (Exception ignored) {
         }
         if (!justOnce) {
             justOnce = true;

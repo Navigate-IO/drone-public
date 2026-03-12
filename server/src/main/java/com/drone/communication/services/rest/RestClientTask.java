@@ -8,6 +8,7 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 
 public class RestClientTask implements Runnable {
+    private static final long RETRY_DELAY_MS = 5000L;
     private final String url;
     private final String messageJson;
 
@@ -18,19 +19,38 @@ public class RestClientTask implements Runnable {
 
     @Override
     public void run() {
-        String jsonPayload = messageJson;
-
         Client client = ClientBuilder.newClient();
-        WebTarget target = client.target(url);
-
-        // Send the POST request with the JSON payload and receive the response
-        Response response = target.request(MediaType.TEXT_PLAIN)
-            .post(Entity.entity(jsonPayload, MediaType.TEXT_PLAIN));
-
         try {
-            System.out.println("Status Code: " + response.getStatus());
+            WebTarget target = client.target(url);
+            while (true) {
+                Response response = null;
+                try {
+                    response = target.request(MediaType.TEXT_PLAIN)
+                        .post(Entity.entity(messageJson, MediaType.TEXT_PLAIN));
+
+                    int status = response.getStatus();
+                    if (status >= 200 && status < 300) {
+                        return;
+                    }
+
+                    if (status >= 400 && status < 500 && status != 429) {
+                        return;
+                    }
+                } catch (Exception ignored) {
+                } finally {
+                    if (response != null) {
+                        response.close();
+                    }
+                }
+
+                try {
+                    Thread.sleep(RETRY_DELAY_MS);
+                } catch (InterruptedException interruptedException) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+            }
         } finally {
-            response.close();
             client.close();
         }
     }
