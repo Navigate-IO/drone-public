@@ -30,7 +30,9 @@ public class DroneGpsSerialReader {
     private static final String DEFAULT_SERIAL_DEVICE = "/dev/ttyUSB0";
     private static final int DEFAULT_BAUD_RATE = 9600;
     private static final long DEFAULT_PUBLISH_INTERVAL_MS = 60_000L;
-    private static final long RECONNECT_DELAY_MS = 3000L;
+    private static final long RECONNECT_DELAY_MS = 15_000L;
+    private static final long AUTO_SCAN_PROBE_WINDOW_MS = 3000L;
+    private static final int AUTO_SCAN_REQUIRED_SUPPORTED_SENTENCES = 1;
     private static final String[] COMMON_LINUX_PORTS = new String[] {
         "/dev/ttyUSB0",
         "/dev/ttyACM0",
@@ -486,12 +488,104 @@ public class DroneGpsSerialReader {
         for (String path : buildCandidatePortPaths(preferredPortPath)) {
             SerialPort candidate = SerialPort.getCommPort(path);
             configure(candidate, baudRate);
-            if (candidate.openPort()) {
+            if (!candidate.openPort()) {
+                continue;
+            }
+
+            boolean isGpsPort;
+            try {
+                isGpsPort = probePortForSupportedGpsSentences(candidate);
+            } finally {
+                if (candidate.isOpen()) {
+                    candidate.closePort();
+                }
+            }
+
+            if (!isGpsPort) {
+                System.err.println("[DRONE GPS] Auto-scan rejected " + path + " (no supported NMEA sentences)");
+                continue;
+            }
+
+            SerialPort confirmed = SerialPort.getCommPort(path);
+            configure(confirmed, baudRate);
+            if (confirmed.openPort()) {
                 activePortPath = path;
-                return candidate;
+                System.out.println("[DRONE GPS] Auto-scan selected " + path + " (NMEA verified)");
+                return confirmed;
             }
         }
         return null;
+    }
+
+    private boolean probePortForSupportedGpsSentences(SerialPort port) {
+        long deadlineMs = System.currentTimeMillis() + AUTO_SCAN_PROBE_WINDOW_MS;
+        int supportedSentenceCount = 0;
+
+        try (BufferedReader reader = new BufferedReader(
+            new InputStreamReader(port.getInputStream(), StandardCharsets.US_ASCII))) {
+
+            while (running.get() && port.isOpen() && System.currentTimeMillis() < deadlineMs) {
+                String line = reader.readLine();
+                if (line == null || line.isBlank()) {
+                    continue;
+                }
+
+                for (String sentence : splitIntoSentenceCandidates(line)) {
+                    if (isSupportedGpsSentence(sentence)) {
+                        supportedSentenceCount++;
+                        if (supportedSentenceCount >= AUTO_SCAN_REQUIRED_SUPPORTED_SENTENCES) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        } catch (IOException exception) {
+            return false;
+        }
+
+        return false;
+    }
+
+    private boolean isSupportedGpsSentence(String sentence) {
+        String sentenceType = extractSentenceType(sentence);
+        if (sentenceType == null) {
+            return false;
+        }
+        return isRmcSentence(sentenceType) || isGgaSentence(sentenceType);
+    }
+
+    private String extractSentenceType(String sentence) {
+        if (sentence == null || sentence.isBlank()) {
+            return null;
+        }
+
+        String sanitized = sanitizeSentence(sentence);
+        int start = sanitized.indexOf('$');
+        if (start < 0) {
+            return null;
+        }
+        if (start > 0) {
+            sanitized = sanitized.substring(start);
+        }
+        if (sanitized.isBlank() || !sanitized.startsWith("$")) {
+            return null;
+        }
+        if (!isChecksumValid(sanitized)) {
+            return null;
+        }
+
+        int checksumIndex = sanitized.indexOf('*');
+        String payload = checksumIndex > 0 ? sanitized.substring(0, checksumIndex) : sanitized;
+        String[] fields = payload.split(",", -1);
+        if (fields.length == 0) {
+            return null;
+        }
+
+        String sentenceType = sanitizeField(fields[0]).toUpperCase();
+        if (sentenceType.length() < 6 || !sentenceType.startsWith("$")) {
+            return null;
+        }
+        return sentenceType;
     }
 
     private Set<String> buildCandidatePortPaths(String preferredPortPath) {
