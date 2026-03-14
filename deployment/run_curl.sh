@@ -1,1 +1,1 @@
- curl http://192.168.40.21 -H "Accept: application/json" > bigdump.json
+ curl http://192.168.40.20 -H "Accept: application/json" > bigdump.json
