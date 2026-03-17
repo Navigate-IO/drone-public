@@ -225,6 +225,7 @@ public class DroneGpsSerialReader {
             }
 
             latestReading.set(reading);
+            printReading(reading);
             if (shouldPublish(reading.getLocalTimestamp())) {
                 publishReading(reading);
             }
@@ -244,7 +245,6 @@ public class DroneGpsSerialReader {
     }
 
     private void publishReading(DroneGpsReading reading) {
-        printReading(reading);
         appendToLog(reading);
         sendReadingToOtherDrones(reading);
     }
