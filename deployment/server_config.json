@@ -8,5 +8,5 @@
   "droneGpsSerialDevice": "/dev/ttyUSB0",
   "droneGpsBaudRate": 9600,
   "droneGpsAutoPortScan": true,
-  "droneGpsPublishIntervalSeconds": 60
+  "droneGpsPublishIntervalSeconds": 30
 }
