@@ -213,8 +213,13 @@ public class DataHandler {
 ////                ServerUtils.processClientData(messageJson, ipAddress);
 //                MessengerUtils.sendToDrones(json);
 //            });
-//            thread.start();
+            //            thread.start();
             MessengerUtils.sendToDrones(json);
+            LteBridgeClient.sendToTargets(
+                Config.getInstance().getLteDroneTargets(),
+                json,
+                "/messenger"
+            );
 
             //Process it
 //            return processClientData(json);
