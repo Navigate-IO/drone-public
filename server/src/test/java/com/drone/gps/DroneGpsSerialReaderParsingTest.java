@@ -28,14 +28,24 @@ class DroneGpsSerialReaderParsingTest {
         assertNotNull(reading.getLongitude());
         assertNotNull(reading.getAltitude());
         assertNotNull(reading.getSpeed());
+        assertNotNull(reading.getTrackAngle());
         assertNotNull(reading.getFixQuality());
+        assertNotNull(reading.getFixType());
         assertNotNull(reading.getSatelliteCount());
+        assertNotNull(reading.getHdop());
+        assertNotNull(reading.getVdop());
+        assertNotNull(reading.getPdop());
 
         assertTrue(reading.getLatitude() > 38.0 && reading.getLatitude() < 39.0);
         assertTrue(reading.getLongitude() < -77.0 && reading.getLongitude() > -78.0);
         assertTrue(reading.getAltitude() > 80.0 && reading.getAltitude() < 100.0);
         assertTrue(reading.getSpeed() >= 0.0);
+        assertTrue(reading.getTrackAngle() >= 0.0);
         assertTrue(reading.getFixQuality() >= 1);
+        assertTrue(reading.getFixType() >= 2);
         assertTrue(reading.getSatelliteCount() >= 1);
+        assertTrue(reading.getHdop() > 0.0);
+        assertTrue(reading.getVdop() > 0.0);
+        assertTrue(reading.getPdop() > 0.0);
     }
 }

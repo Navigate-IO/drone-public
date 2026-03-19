@@ -1,5 +1,7 @@
 package com.drone.communication.services.rest;
 
+import com.drone.LteBridgeClient;
+import com.drone.MessengerUtils;
 import com.drone.ServerUtils;
 import com.drone.Utils;
 import com.drone.communication.DroneMessenger;
@@ -31,13 +33,24 @@ public class DroneMessageServer {
                 && relayMessage.getReading() != null) {
                 DroneGpsReading reading = relayMessage.getReading();
                 System.out.println(String.format(
-                    "[DRONE GPS RELAY] lat=%s lon=%s alt=%s speed=%s fix=%s sats=%s utc=%s local=%d",
+                    "[DRONE GPS RELAY] lat=%s lon=%s alt=%s speed=%s track=%s magVar=%s fixQ=%s fixType=%s satsUsed=%s satsView=%s satPrns=%s hdop=%s vdop=%s pdop=%s geoid=%s utcDate=%s utcTime=%s utc=%s local=%d",
                     reading.getLatitude(),
                     reading.getLongitude(),
                     reading.getAltitude(),
                     reading.getSpeed(),
+                    reading.getTrackAngle(),
+                    reading.getMagneticVariation(),
                     reading.getFixQuality(),
+                    reading.getFixType(),
                     reading.getSatelliteCount(),
+                    reading.getSatellitesInViewCount(),
+                    reading.getSatellitesInViewPrns(),
+                    reading.getHdop(),
+                    reading.getVdop(),
+                    reading.getPdop(),
+                    reading.getGeoidHeight(),
+                    reading.getUtcDate(),
+                    reading.getUtcTime(),
                     reading.getUtcTimestamp(),
                     reading.getLocalTimestamp()
                 ));
@@ -70,6 +83,11 @@ public class DroneMessageServer {
             String messageJson = Utils.toJson(message);
             System.out.println(
                 "Sending message to other drones {}" + messageJson);
+            LteBridgeClient.sendToTargets(
+                MessengerUtils.resolveLteTargetsForMessage(message),
+                message.getMessage(),
+                "/messenger"
+            );
 //            Message message = Utils.fromJson(messageJson, Message.class);
             DroneMessenger.getInstance().sendMessage(message);
             return "OK";

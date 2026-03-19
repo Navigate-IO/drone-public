@@ -5,6 +5,8 @@ import com.google.gson.Gson;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
+import java.util.ArrayList;
+import java.util.List;
 
 public class Config {
     private String ipAddress;
@@ -13,6 +15,7 @@ public class Config {
     private String teamName;
     private String actualIpAddress;
     private String otherDronesUrls;
+    private List<String> lteDroneTargets;
     private String droneGpsSerialDevice;
     private int droneGpsBaudRate;
     private boolean droneGpsAutoPortScan;
@@ -25,6 +28,7 @@ public class Config {
         teamName = "NavigateIO";
         actualIpAddress = "192.168.40.20";
         otherDronesUrls = "";
+        lteDroneTargets = new ArrayList<>();
         droneGpsSerialDevice = "/dev/ttyUSB0";
         droneGpsBaudRate = 9600;
         droneGpsAutoPortScan = false;
@@ -84,6 +88,17 @@ public class Config {
 
     public void setOtherDronesUrls(String otherDronesUrls) {
         this.otherDronesUrls = otherDronesUrls;
+    }
+
+    public List<String> getLteDroneTargets() {
+        if (lteDroneTargets == null) {
+            lteDroneTargets = new ArrayList<>();
+        }
+        return lteDroneTargets;
+    }
+
+    public void setLteDroneTargets(List<String> lteDroneTargets) {
+        this.lteDroneTargets = lteDroneTargets;
     }
 
     public String getDroneGpsSerialDevice() {

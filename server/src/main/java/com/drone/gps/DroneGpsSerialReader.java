@@ -23,6 +23,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.StringJoiner;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -62,8 +63,19 @@ public class DroneGpsSerialReader {
     private Double lastLongitude;
     private Double lastAltitude;
     private Double lastSpeed;
+    private Double lastTrackAngle;
+    private Double lastMagneticVariation;
     private Integer lastFixQuality;
+    private Integer lastFixType;
     private Integer lastSatelliteCount;
+    private Integer lastSatellitesInViewCount;
+    private Double lastHdop;
+    private Double lastVdop;
+    private Double lastPdop;
+    private Double lastGeoidHeight;
+    private String lastUtcDateRaw;
+    private String lastUtcTimeRaw;
+    private final LinkedHashSet<Integer> lastSatellitesInViewPrns = new LinkedHashSet<>();
     private String lastUtcTimestamp;
 
     private DroneGpsSerialReader() {
@@ -210,6 +222,12 @@ public class DroneGpsSerialReader {
             if (isGgaSentence(sentenceType)) {
                 return parseGga(fields);
             }
+            if (isGsaSentence(sentenceType)) {
+                return parseGsa(fields);
+            }
+            if (isGsvSentence(sentenceType)) {
+                return parseGsv(fields);
+            }
         } catch (RuntimeException exception) {
             System.err.println("[DRONE GPS] Ignoring malformed sentence: " + sentence);
         }
@@ -295,11 +313,18 @@ public class DroneGpsSerialReader {
         Double latitude = parseCoordinate(fields[3], fields[4]);
         Double longitude = parseCoordinate(fields[5], fields[6]);
         Double speed = parseDouble(fields[7]);
+        Double trackAngle = parseDouble(fields[8]);
+        Double magneticVariation = fields.length > 10 ? parseDouble(fields[10]) : null;
+        if (magneticVariation != null && fields.length > 11 && "W".equalsIgnoreCase(fields[11])) {
+            magneticVariation = -Math.abs(magneticVariation);
+        }
 
         LocalDate utcDate = parseDate(fields[9]);
         if (utcDate != null) {
             lastUtcDateFromRmc = utcDate;
         }
+        lastUtcDateRaw = normalizeRmcDate(fields[9]);
+        lastUtcTimeRaw = normalizeUtcTime(fields[1]);
 
         String utcTimestamp = buildUtcTimestamp(utcDate, fields[1]);
         if (utcTimestamp != null) {
@@ -315,6 +340,12 @@ public class DroneGpsSerialReader {
             }
             if (speed != null) {
                 lastSpeed = speed;
+            }
+            if (trackAngle != null) {
+                lastTrackAngle = trackAngle;
+            }
+            if (magneticVariation != null) {
+                lastMagneticVariation = magneticVariation;
             }
             if (lastFixQuality == null || lastFixQuality <= 0) {
                 lastFixQuality = 1;
@@ -336,6 +367,16 @@ public class DroneGpsSerialReader {
             } else if (speed != null) {
                 lastSpeed = speed;
             }
+            if (isBlank(fields[8])) {
+                lastTrackAngle = null;
+            } else if (trackAngle != null) {
+                lastTrackAngle = trackAngle;
+            }
+            if (fields.length <= 10 || isBlank(fields[10])) {
+                lastMagneticVariation = null;
+            } else if (magneticVariation != null) {
+                lastMagneticVariation = magneticVariation;
+            }
         }
 
         return buildReading();
@@ -350,12 +391,15 @@ public class DroneGpsSerialReader {
         Double longitude = parseCoordinate(fields[4], fields[5]);
         Integer fixQuality = parseInteger(fields[6]);
         Integer satelliteCount = parseInteger(fields[7]);
+        Double hdop = parseDouble(fields[8]);
         Double altitude = parseDouble(fields[9]);
+        Double geoidHeight = fields.length > 11 ? parseDouble(fields[11]) : null;
 
         String utcTimestamp = buildUtcTimestamp(lastUtcDateFromRmc, fields[1]);
         if (utcTimestamp != null) {
             lastUtcTimestamp = utcTimestamp;
         }
+        lastUtcTimeRaw = normalizeUtcTime(fields[1]);
 
         if (fixQuality != null && fixQuality <= 0) {
             lastFixQuality = fixQuality;
@@ -375,6 +419,16 @@ public class DroneGpsSerialReader {
             } else if (altitude != null) {
                 lastAltitude = altitude;
             }
+            if (isBlank(fields[8])) {
+                lastHdop = null;
+            } else if (hdop != null) {
+                lastHdop = hdop;
+            }
+            if (fields.length <= 11 || isBlank(fields[11])) {
+                lastGeoidHeight = null;
+            } else if (geoidHeight != null) {
+                lastGeoidHeight = geoidHeight;
+            }
         } else {
             if (latitude != null) {
                 lastLatitude = latitude;
@@ -388,10 +442,69 @@ public class DroneGpsSerialReader {
             if (fixQuality != null) {
                 lastFixQuality = fixQuality;
             }
+            if (hdop != null) {
+                lastHdop = hdop;
+            }
+            if (geoidHeight != null) {
+                lastGeoidHeight = geoidHeight;
+            }
         }
 
         if (satelliteCount != null) {
             lastSatelliteCount = satelliteCount;
+        }
+
+        return buildReading();
+    }
+
+    private DroneGpsReading parseGsa(String[] fields) {
+        if (fields.length < 4) {
+            return null;
+        }
+
+        Integer fixType = parseInteger(fields[2]);
+        if (fixType != null) {
+            lastFixType = fixType;
+        }
+
+        int dopStart = Math.max(3, fields.length - 3);
+        Double pdop = fields.length >= dopStart + 1 ? parseDouble(fields[dopStart]) : null;
+        Double hdop = fields.length >= dopStart + 2 ? parseDouble(fields[dopStart + 1]) : null;
+        Double vdop = fields.length >= dopStart + 3 ? parseDouble(fields[dopStart + 2]) : null;
+
+        if (pdop != null) {
+            lastPdop = pdop;
+        }
+        if (hdop != null) {
+            lastHdop = hdop;
+        }
+        if (vdop != null) {
+            lastVdop = vdop;
+        }
+
+        return buildReading();
+    }
+
+    private DroneGpsReading parseGsv(String[] fields) {
+        if (fields.length < 4) {
+            return null;
+        }
+
+        Integer messageNumber = parseInteger(fields[2]);
+        Integer satellitesInView = parseInteger(fields[3]);
+        if (satellitesInView != null) {
+            lastSatellitesInViewCount = satellitesInView;
+        }
+
+        if (messageNumber != null && messageNumber == 1) {
+            lastSatellitesInViewPrns.clear();
+        }
+
+        for (int index = 4; index < fields.length; index += 4) {
+            Integer prn = parseInteger(fields[index]);
+            if (prn != null && prn > 0) {
+                lastSatellitesInViewPrns.add(prn);
+            }
         }
 
         return buildReading();
@@ -404,8 +517,19 @@ public class DroneGpsSerialReader {
             lastLongitude,
             lastAltitude,
             lastSpeed,
+            lastTrackAngle,
+            lastMagneticVariation,
             lastFixQuality,
+            lastFixType,
             lastSatelliteCount,
+            lastSatellitesInViewCount,
+            new ArrayList<>(lastSatellitesInViewPrns),
+            lastHdop,
+            lastVdop,
+            lastPdop,
+            lastGeoidHeight,
+            lastUtcDateRaw,
+            lastUtcTimeRaw,
             lastUtcTimestamp,
             localTimestamp
         );
@@ -413,13 +537,24 @@ public class DroneGpsSerialReader {
 
     private void printReading(DroneGpsReading reading) {
         String line = String.format(
-            "[DRONE GPS] lat=%s lon=%s alt(m)=%s speed(knots)=%s fix=%s sats=%s utc=%s local=%d",
+            "[DRONE GPS] lat=%s lon=%s alt(m)=%s speed(knots)=%s track=%s magVar=%s fixQ=%s fixType=%s satsUsed=%s satsView=%s satPrns=%s hdop=%s vdop=%s pdop=%s geoid=%s utcDate=%s utcTime=%s utc=%s local=%d",
             formatDouble(reading.getLatitude(), 6),
             formatDouble(reading.getLongitude(), 6),
             formatDouble(reading.getAltitude(), 2),
             formatDouble(reading.getSpeed(), 2),
+            formatDouble(reading.getTrackAngle(), 2),
+            formatDouble(reading.getMagneticVariation(), 2),
             formatInteger(reading.getFixQuality()),
+            formatInteger(reading.getFixType()),
             formatInteger(reading.getSatelliteCount()),
+            formatInteger(reading.getSatellitesInViewCount()),
+            formatIntegerList(reading.getSatellitesInViewPrns()),
+            formatDouble(reading.getHdop(), 2),
+            formatDouble(reading.getVdop(), 2),
+            formatDouble(reading.getPdop(), 2),
+            formatDouble(reading.getGeoidHeight(), 2),
+            formatString(reading.getUtcDate()),
+            formatString(reading.getUtcTime()),
             formatString(reading.getUtcTimestamp()),
             reading.getLocalTimestamp()
         );
@@ -436,20 +571,31 @@ public class DroneGpsSerialReader {
                 StandardOpenOption.APPEND)) {
 
                 if (!fileExists) {
-                    writer.write("localTimestamp,utcTimestamp,latitude,longitude,altitude,speed,fixQuality,satelliteCount");
+                    writer.write("localTimestamp,utcTimestamp,utcDate,utcTime,latitude,longitude,altitude,speed,trackAngle,magneticVariation,fixQuality,fixType,satelliteCount,satellitesInViewCount,satellitesInViewPrns,hdop,vdop,pdop,geoidHeight");
                     writer.newLine();
                 }
 
                 String csvLine = String.format(
-                    "%d,%s,%s,%s,%s,%s,%s,%s",
+                    "%d,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s",
                     reading.getLocalTimestamp(),
                     csvValue(reading.getUtcTimestamp()),
+                    csvValue(reading.getUtcDate()),
+                    csvValue(reading.getUtcTime()),
                     csvValue(reading.getLatitude()),
                     csvValue(reading.getLongitude()),
                     csvValue(reading.getAltitude()),
                     csvValue(reading.getSpeed()),
+                    csvValue(reading.getTrackAngle()),
+                    csvValue(reading.getMagneticVariation()),
                     csvValue(reading.getFixQuality()),
-                    csvValue(reading.getSatelliteCount())
+                    csvValue(reading.getFixType()),
+                    csvValue(reading.getSatelliteCount()),
+                    csvValue(reading.getSatellitesInViewCount()),
+                    csvListValue(reading.getSatellitesInViewPrns()),
+                    csvValue(reading.getHdop()),
+                    csvValue(reading.getVdop()),
+                    csvValue(reading.getPdop()),
+                    csvValue(reading.getGeoidHeight())
                 );
                 writer.write(csvLine);
                 writer.newLine();
@@ -461,6 +607,20 @@ public class DroneGpsSerialReader {
 
     private String csvValue(Object value) {
         return value == null ? "" : String.valueOf(value);
+    }
+
+    private String csvListValue(List<Integer> values) {
+        if (values == null || values.isEmpty()) {
+            return "";
+        }
+
+        StringJoiner joiner = new StringJoiner("|");
+        for (Integer value : values) {
+            if (value != null) {
+                joiner.add(String.valueOf(value));
+            }
+        }
+        return joiner.toString();
     }
 
     private String sanitizeSentence(String sentence) {
@@ -551,7 +711,10 @@ public class DroneGpsSerialReader {
         if (sentenceType == null) {
             return false;
         }
-        return isRmcSentence(sentenceType) || isGgaSentence(sentenceType);
+        return isRmcSentence(sentenceType)
+            || isGgaSentence(sentenceType)
+            || isGsaSentence(sentenceType)
+            || isGsvSentence(sentenceType);
     }
 
     private String extractSentenceType(String sentence) {
@@ -644,6 +807,14 @@ public class DroneGpsSerialReader {
         return sentenceType != null && sentenceType.startsWith("$") && sentenceType.endsWith("GGA");
     }
 
+    private boolean isGsaSentence(String sentenceType) {
+        return sentenceType != null && sentenceType.startsWith("$") && sentenceType.endsWith("GSA");
+    }
+
+    private boolean isGsvSentence(String sentenceType) {
+        return sentenceType != null && sentenceType.startsWith("$") && sentenceType.endsWith("GSV");
+    }
+
     private boolean isChecksumValid(String sentence) {
         int asteriskIndex = sentence.indexOf('*');
         if (asteriskIndex <= 0) {
@@ -685,15 +856,26 @@ public class DroneGpsSerialReader {
             -1.0,
             -1.0,
             -1.0,
+            -1.0,
+            -1.0,
             -1,
             -1,
+            -1,
+            -1,
+            List.of(),
+            -1.0,
+            -1.0,
+            -1.0,
+            -1.0,
+            utcStatus,
+            utcStatus,
             utcStatus,
             System.currentTimeMillis()
         );
         latestReading.set(placeholder);
 
         System.out.println(
-            "[DRONE GPS] lat=-1 lon=-1 alt(m)=-1 speed(knots)=-1 fix=-1 sats=-1 utc="
+            "[DRONE GPS] lat=-1 lon=-1 alt(m)=-1 speed(knots)=-1 track=-1 magVar=-1 fixQ=-1 fixType=-1 satsUsed=-1 satsView=-1 satPrns=[] hdop=-1 vdop=-1 pdop=-1 geoid=-1 utcDate="
                 + utcStatus + " local=" + placeholder.getLocalTimestamp()
         );
     }
@@ -885,5 +1067,28 @@ public class DroneGpsSerialReader {
 
     private String formatString(String value) {
         return value == null || value.isBlank() ? "n/a" : value;
+    }
+
+    private String formatIntegerList(List<Integer> values) {
+        if (values == null || values.isEmpty()) {
+            return "[]";
+        }
+        return values.toString();
+    }
+
+    private String normalizeUtcTime(String rawTime) {
+        if (rawTime == null) {
+            return null;
+        }
+        String cleaned = rawTime.replaceAll("[^0-9.]", "");
+        return cleaned.isBlank() ? null : cleaned;
+    }
+
+    private String normalizeRmcDate(String rawDate) {
+        String cleaned = extractNumeric(rawDate);
+        if (cleaned == null || cleaned.length() < 6) {
+            return null;
+        }
+        return cleaned.substring(0, 6);
     }
 }
