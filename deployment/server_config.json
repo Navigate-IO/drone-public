@@ -5,7 +5,7 @@
   "takeOffTime": -1,
   "actualIpAddress": "192.168.40.20",
   "otherDronesUrls": "",
-  "lteDroneTargets": [],
+  "lteDroneTargets": ["drone_1"],
   "droneGpsSerialDevice": "/dev/ttyUSB0",
   "droneGpsBaudRate": 9600,
   "droneGpsAutoPortScan": true,
