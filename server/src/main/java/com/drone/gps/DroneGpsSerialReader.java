@@ -1,6 +1,7 @@
 package com.drone.gps;
 
 import com.drone.Config;
+import com.drone.LteBridgeClient;
 import com.drone.MessengerUtils;
 import com.drone.Utils;
 import com.drone.data.DroneGpsReading;
@@ -274,6 +275,11 @@ public class DroneGpsSerialReader {
         DroneGpsRelayMessage relayMessage = new DroneGpsRelayMessage("drone-gps", reading);
         String relayJson = Utils.toJson(relayMessage);
         MessengerUtils.sendToDrones(relayJson);
+        LteBridgeClient.sendToTargets(
+            Config.getInstance().getLteDroneTargets(),
+            relayJson,
+            "/messenger"
+        );
     }
 
     private List<String> splitIntoSentenceCandidates(String incomingText) {

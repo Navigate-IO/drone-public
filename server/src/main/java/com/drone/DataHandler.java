@@ -202,7 +202,7 @@ public class DataHandler {
     }
 
     @POST
-    @Consumes(MediaType.APPLICATION_JSON)
+    @Consumes({MediaType.APPLICATION_JSON, MediaType.TEXT_PLAIN})
     @Produces(MediaType.APPLICATION_JSON)
     public ServerData getClientData(String json) {
         System.out.println("Received data from sensor =" + json);
